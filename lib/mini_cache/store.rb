@@ -1,7 +1,9 @@
+require 'monitor'
+
 module MiniCache
   class Store
     include Enumerable
-    
+
     # Public: Returns the hash of key-value pairs.
     attr_reader :data
 
@@ -12,6 +14,7 @@ module MiniCache
     # Returns nothing.
     def initialize(data = {})
       @data = {}
+      @mutex = Mutex.new
       self.load(data)
     end
 
@@ -23,7 +26,9 @@ module MiniCache
     #   set, returns nil.
     def get(key)
       check_key!(key)
-      @data[key.to_s]
+      @mutex.synchronize do
+        @data[key.to_s]
+      end
     end
 
     # Public: Sets a value for a given key either as
@@ -46,7 +51,9 @@ module MiniCache
     # Returns the value given.
     def set(key, value = nil)
       check_key!(key)
-      @data[key.to_s] = block_given? ? yield : value
+      @mutex.synchronize do
+        @data[key.to_s] = block_given? ? yield : value
+      end
     end
 
     # Public: Determines whether a value has been set for
@@ -57,7 +64,9 @@ module MiniCache
     # Returns a Boolean.
     def set?(key)
       check_key!(key)
-      @data.keys.include?(key.to_s)
+      @mutex.synchronize do
+        @data.keys.include?(key.to_s)
+      end
     end
 
     # Public: Retrieves the value for a given key if it
@@ -98,14 +107,18 @@ module MiniCache
     # Returns the value.
     def unset(key)
       check_key!(key)
-      @data.delete(key.to_s)
+      @mutex.synchronize do
+        @data.delete(key.to_s)
+      end
     end
-    
+
     # Public: Clears all key-value pairs.
     #
     # Returns nothing.
     def reset
-      @data = {}
+      @mutex.synchronize do
+        @data = {}
+      end
     end
 
     # Public: Iterates over all key-value pairs.
@@ -117,21 +130,23 @@ module MiniCache
     def each(&block)
       @data.each { |k, v| yield(k, v) }
     end
-    
+
     # Public: Loads a hash of data into the cache.
     #
     # data - A Hash of data with either String or Symbol keys.
     #
     # Returns nothing.
     def load(data)
-      data.each do |key, value|
-        check_key!(key)
-        @data[key.to_s] = value
+      @mutex.synchronize do
+        data.each do |key, value|
+          check_key!(key)
+          @data[key.to_s] = value
+        end
       end
     end
-    
+
     private
-    
+
       # Internal: Raises an error if the key is not a String
       # or a Symbol.
       #
